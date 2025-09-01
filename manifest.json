@@ -14,7 +14,7 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "permissions": ["scripting", "tabs", "activeTab", "storage"],
+  "permissions": ["scripting", "tabs", "activeTab", "storage", "identity"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
@@ -43,6 +43,12 @@
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "../background/intex.ts"
+  },
+  "oauth2": {
+  "client_id": "585735488383-ob7h2r0tgfkhr27d4me92747uoek38qt.apps.googleusercontent.com",
+  "scopes": [
+    "https://www.googleapis.com/auth/calendar.events"
+  ]
   }
 }
