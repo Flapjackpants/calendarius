@@ -1,67 +1,117 @@
-// src/pages/popup/Popup.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from "react";
+import FullCalendar from "@fullcalendar/react";
+import { EventClickArg } from "@fullcalendar/core/index.js";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import Modal from "react-modal";
 
-const Popup = () => {
-  const [token, setToken] = useState<string | null>(null);
-  const [eventStatus, setEventStatus] = useState<string>('');
+// Define event type
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  location?: string;
+  description?: string;
+}
 
-  const handleLogin = () => {
-  chrome.runtime.sendMessage({ action: 'login' }, (response) => {
-    if (response?.success) {
-      setToken(response.token);
-      setEventStatus('Login successful');
-    } else {
-      setEventStatus('Login failed');
-    }
-  });
+// Modal styles
+const customStyles = {
+  content: {
+    top: "50%",
+    left: "50%",
+    right: "auto",
+    bottom: "auto",
+    marginRight: "-50%",
+    transform: "translate(-50%, -50%)",
+    minWidth: "300px",
+  },
 };
 
-  const handleScreenshot = async () => {
-    chrome.runtime.sendMessage({ action: 'take_screenshot' });
-  };
+const Popup: React.FC = () => {
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [modalIsOpen, setModalIsOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
-  const handleCreateEvent = () => {
-    if (!token) {
-      setEventStatus('Please log in first');
-      return;
-    }
+  // ✅ Set Modal app element after DOM exists
+  useEffect(() => {
+    Modal.setAppElement("#root");
+  }, []);
 
-    fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        summary: 'AI-created Event from Screenshot',
-        start: { dateTime: '2025-06-08T10:00:00-04:00' },
-        end: { dateTime: '2025-06-08T11:00:00-04:00' },
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log('Event created:', data);
-        setEventStatus('Event created successfully');
-      })
-      .catch((err) => {
-        console.error(err);
-        setEventStatus('Error creating event');
-      });
+  // Fetch Google Calendar events from background
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: "FETCH_EVENTS" }, (response) => {
+      if (response?.events) {
+        const mappedEvents = response.events.map((event: any) => ({
+          id: event.id,
+          title: event.summary || "(No Title)",
+          start: event.start.dateTime || event.start.date,
+          end: event.end.dateTime || event.end.date,
+          location: event.location,
+          description: event.description,
+        }));
+        setEvents(mappedEvents);
+      }
+    });
+  }, []);
+
+  // Handle event click
+  const handleEventClick = (clickInfo: EventClickArg) => {
+    const event = clickInfo.event;
+    setSelectedEvent({
+      id: event.id,
+      title: event.title,
+      start: event.start?.toISOString() || "",
+      end: event.end?.toISOString() || "",
+      location: event.extendedProps.location,
+      description: event.extendedProps.description,
+    });
+    setModalIsOpen(true);
   };
 
   return (
-    <div className="p-4 w-[300px]">
-      <h1 className="text-lg font-bold mb-2">Calendarius</h1>
-      <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded mb-2 w-full">
-        Log in with Google
-      </button>
-      <button onClick={handleScreenshot} className="bg-green-600 text-white px-4 py-2 rounded mb-2 w-full">
-        Take Screenshot
-      </button>
-      <button onClick={handleCreateEvent} className="bg-purple-600 text-white px-4 py-2 rounded w-full">
-        Create Calendar Event
-      </button>
-      <p className="mt-2 text-sm text-gray-700">{eventStatus}</p>
+    <div style={{ width: "400px", height: "500px" }}>
+      <h2>📅 My Google Calendar</h2>
+      <FullCalendar
+        plugins={[dayGridPlugin, interactionPlugin]}
+        initialView="dayGridMonth"
+        events={events}
+        eventClick={handleEventClick}
+        height="auto"
+      />
+
+      {/* Event Details Modal */}
+      <Modal
+        isOpen={modalIsOpen}
+        onRequestClose={() => setModalIsOpen(false)}
+        style={customStyles}
+        contentLabel="Event Details"
+      >
+        {selectedEvent && (
+          <div>
+            <h3>{selectedEvent.title}</h3>
+            <p>
+              <strong>Start:</strong>{" "}
+              {new Date(selectedEvent.start).toLocaleString()}
+            </p>
+            <p>
+              <strong>End:</strong>{" "}
+              {new Date(selectedEvent.end).toLocaleString()}
+            </p>
+            {selectedEvent.location && (
+              <p>
+                <strong>Location:</strong> {selectedEvent.location}
+              </p>
+            )}
+            {selectedEvent.description && (
+              <p>
+                <strong>Description:</strong> {selectedEvent.description}
+              </p>
+            )}
+            <button onClick={() => setModalIsOpen(false)}>Close</button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
